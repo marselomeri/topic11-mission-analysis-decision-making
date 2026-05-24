@@ -72,6 +72,19 @@ Optional GUI mode:
 /tmp/topic11-tutor-lab/.venv311/bin/python /tmp/topic11-tutor-lab/pybullet_delivery_emergency_demo.py --gui --gif /tmp/topic11-tutor-lab/delivery_emergency_demo.gif
 ```
 
+Recommended live-teaching mode:
+
+```bash
+/tmp/topic11-tutor-lab/.venv311/bin/python /tmp/topic11-tutor-lab/pybullet_delivery_emergency_demo.py --gui --no-gif
+```
+
+In GUI mode, the demo now includes:
+
+- a 3D mission-status board inside the world
+- a live battery bar that discharges during flight
+- labels for the warehouse, customer, and emergency pads
+- free mouse camera control so you can rotate, pan, and zoom while the mission runs
+
 ## Suggested Student Deliverables
 
 - a mission-state diagram

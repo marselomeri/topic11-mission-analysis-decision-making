@@ -36,6 +36,10 @@ class DemoConfig:
     image_height: int = 540
 
 
+def state_label(state: MissionState) -> str:
+    return state.name.replace("_", " ").title()
+
+
 def create_box(
     half_extents: tuple[float, float, float],
     position: tuple[float, float, float],
@@ -102,6 +106,141 @@ def create_scene() -> dict[str, object]:
     }
 
 
+def add_scene_labels(customer_xy: np.ndarray, pads: list[np.ndarray]) -> None:
+    p.addUserDebugText(
+        "Warehouse",
+        textPosition=(-0.4, 0.0, 0.8),
+        textColorRGB=(0.78, 0.18, 0.16),
+        textSize=1.2,
+    )
+    p.addUserDebugText(
+        "Customer",
+        textPosition=(customer_xy[0] - 0.3, customer_xy[1], 0.8),
+        textColorRGB=(0.13, 0.55, 0.22),
+        textSize=1.2,
+    )
+    for idx, pad in enumerate(pads, start=1):
+        p.addUserDebugText(
+            f"Emergency Pad {idx}",
+            textPosition=(pad[0] - 0.65, pad[1], 0.24),
+            textColorRGB=(0.92, 0.65, 0.12),
+            textSize=1.05,
+        )
+
+
+def init_gui_hud() -> dict[str, object]:
+    board_origin = np.array((-2.3, 4.0, 3.4), dtype=float)
+    p.addUserDebugLine(board_origin + np.array((0.0, -0.55, -0.95)), board_origin + np.array((0.0, -0.55, 0.95)), [0.3, 0.3, 0.3], 3.0)
+    p.addUserDebugLine(board_origin + np.array((2.9, -0.55, -0.95)), board_origin + np.array((2.9, -0.55, 0.95)), [0.3, 0.3, 0.3], 3.0)
+    p.addUserDebugLine(board_origin + np.array((0.0, -0.55, 0.95)), board_origin + np.array((2.9, -0.55, 0.95)), [0.3, 0.3, 0.3], 3.0)
+    p.addUserDebugLine(board_origin + np.array((0.0, -0.55, -0.95)), board_origin + np.array((2.9, -0.55, -0.95)), [0.3, 0.3, 0.3], 3.0)
+
+    return {
+        "board_origin": board_origin,
+        "title": -1,
+        "state": -1,
+        "battery_text": -1,
+        "position": -1,
+        "message": -1,
+        "instructions": -1,
+        "battery_bg": -1,
+        "battery_fill": -1,
+        "battery_threshold": -1,
+        "drone_text": -1,
+    }
+
+
+def update_gui_hud(
+    hud: dict[str, object],
+    state: MissionState,
+    battery: float,
+    emergency_pad: np.ndarray | None,
+    current_position: np.ndarray,
+    step: int,
+) -> None:
+    board_origin = np.array(hud["board_origin"], dtype=float)
+    battery_color = [0.21, 0.74, 0.42] if battery > 45 else [0.92, 0.72, 0.18] if battery > 30 else [0.86, 0.25, 0.25]
+    message = "Nominal delivery route active."
+    if emergency_pad is not None:
+        message = f"Low battery: divert to pad ({emergency_pad[0]:.1f}, {emergency_pad[1]:.1f})."
+
+    hud["title"] = p.addUserDebugText(
+        "Delivery Mission Monitor",
+        textPosition=(board_origin + np.array((0.15, 0.0, 0.68))).tolist(),
+        textColorRGB=(0.95, 0.95, 0.95),
+        textSize=1.4,
+        replaceItemUniqueId=int(hud["title"]),
+    )
+    hud["state"] = p.addUserDebugText(
+        f"State: {state_label(state)}",
+        textPosition=(board_origin + np.array((0.15, 0.0, 0.35))).tolist(),
+        textColorRGB=(0.88, 0.92, 0.96),
+        textSize=1.2,
+        replaceItemUniqueId=int(hud["state"]),
+    )
+    hud["battery_text"] = p.addUserDebugText(
+        f"Battery: {battery:5.1f}%",
+        textPosition=(board_origin + np.array((0.15, 0.0, 0.05))).tolist(),
+        textColorRGB=(0.88, 0.92, 0.96),
+        textSize=1.2,
+        replaceItemUniqueId=int(hud["battery_text"]),
+    )
+    hud["position"] = p.addUserDebugText(
+        f"Position: ({current_position[0]:.1f}, {current_position[1]:.1f}, {current_position[2]:.1f})",
+        textPosition=(board_origin + np.array((0.15, 0.0, -0.25))).tolist(),
+        textColorRGB=(0.88, 0.92, 0.96),
+        textSize=1.1,
+        replaceItemUniqueId=int(hud["position"]),
+    )
+    hud["message"] = p.addUserDebugText(
+        message,
+        textPosition=(board_origin + np.array((0.15, 0.0, -0.58))).tolist(),
+        textColorRGB=(0.96, 0.84, 0.34) if emergency_pad is None else (0.92, 0.42, 0.34),
+        textSize=1.05,
+        replaceItemUniqueId=int(hud["message"]),
+    )
+    hud["instructions"] = p.addUserDebugText(
+        f"Mouse: rotate / pan / zoom   Step: {step}",
+        textPosition=(board_origin + np.array((0.15, 0.0, -0.84))).tolist(),
+        textColorRGB=(0.72, 0.78, 0.84),
+        textSize=0.95,
+        replaceItemUniqueId=int(hud["instructions"]),
+    )
+
+    bar_left = board_origin + np.array((1.38, 0.0, 0.02))
+    bar_right = board_origin + np.array((2.65, 0.0, 0.02))
+    fill_right = board_origin + np.array((1.38 + 1.27 * battery / 100.0, 0.0, 0.02))
+    threshold_x = 1.38 + 1.27 * 0.45
+    hud["battery_bg"] = p.addUserDebugLine(
+        bar_left.tolist(),
+        bar_right.tolist(),
+        [0.72, 0.72, 0.72],
+        8.0,
+        replaceItemUniqueId=int(hud["battery_bg"]),
+    )
+    hud["battery_fill"] = p.addUserDebugLine(
+        bar_left.tolist(),
+        fill_right.tolist(),
+        battery_color,
+        7.0,
+        replaceItemUniqueId=int(hud["battery_fill"]),
+    )
+    hud["battery_threshold"] = p.addUserDebugLine(
+        (board_origin + np.array((threshold_x, 0.0, -0.09))).tolist(),
+        (board_origin + np.array((threshold_x, 0.0, 0.13))).tolist(),
+        [0.92, 0.3, 0.3],
+        3.0,
+        replaceItemUniqueId=int(hud["battery_threshold"]),
+    )
+    hud["drone_text"] = p.addUserDebugText(
+        f"{state_label(state)} | {battery:4.1f}%",
+        textPosition=(current_position + np.array((0.0, 0.0, 0.55))).tolist(),
+        textColorRGB=(0.12, 0.12, 0.12),
+        textSize=1.1,
+        replaceItemUniqueId=int(hud["drone_text"]),
+    )
+
+
 def move_toward(current: np.ndarray, target: np.ndarray, max_step: float) -> np.ndarray:
     delta = target - current
     distance = float(np.linalg.norm(delta))
@@ -159,7 +298,7 @@ def draw_overlay(
     return np.asarray(image)
 
 
-def simulate_demo(config: DemoConfig, use_gui: bool, output_gif: Path) -> dict[str, object]:
+def simulate_demo(config: DemoConfig, use_gui: bool, output_gif: Path | None) -> dict[str, object]:
     connection_mode = p.GUI if use_gui else p.DIRECT
     client = p.connect(connection_mode)
     if client < 0:
@@ -167,6 +306,7 @@ def simulate_demo(config: DemoConfig, use_gui: bool, output_gif: Path) -> dict[s
 
     try:
         if use_gui:
+            p.configureDebugVisualizer(p.COV_ENABLE_GUI, 1)
             p.resetDebugVisualizerCamera(
                 cameraDistance=10.0,
                 cameraYaw=36.0,
@@ -179,6 +319,8 @@ def simulate_demo(config: DemoConfig, use_gui: bool, output_gif: Path) -> dict[s
         package = int(scene["package"])
         customer_xy = np.array(scene["customer_xy"], dtype=float)
         pads = [np.array(pad, dtype=float) for pad in scene["pads"]]
+        add_scene_labels(customer_xy, pads)
+        hud = init_gui_hud() if use_gui else None
 
         state = MissionState.TAKEOFF
         battery = 100.0
@@ -243,6 +385,8 @@ def simulate_demo(config: DemoConfig, use_gui: bool, output_gif: Path) -> dict[s
             orientation = p.getQuaternionFromEuler((0.0, 0.0, yaw))
             p.resetBasePositionAndOrientation(drone, position.tolist(), orientation)
             p.resetBasePositionAndOrientation(package, (position + np.array((0.0, 0.0, -0.15))).tolist(), orientation)
+            if use_gui and hud is not None:
+                update_gui_hud(hud, state, battery, emergency_pad, position, step)
             p.stepSimulation()
 
             if use_gui:
@@ -250,7 +394,7 @@ def simulate_demo(config: DemoConfig, use_gui: bool, output_gif: Path) -> dict[s
 
                 time.sleep(config.dt)
 
-            if step % config.render_every_n_steps == 0:
+            if output_gif is not None and step % config.render_every_n_steps == 0:
                 view = p.computeViewMatrixFromYawPitchRoll(
                     cameraTargetPosition=(4.0, 0.0, 0.9),
                     distance=10.5,
@@ -276,10 +420,11 @@ def simulate_demo(config: DemoConfig, use_gui: bool, output_gif: Path) -> dict[s
                 frame = draw_overlay(frame, state, battery, emergency_pad, position[:2], step)
                 frames.append(frame)
 
-        if not frames:
-            raise RuntimeError("No frames were captured from the simulation.")
+        if output_gif is not None:
+            if not frames:
+                raise RuntimeError("No frames were captured from the simulation.")
 
-        imageio.mimsave(output_gif, frames, fps=15, loop=0)
+            imageio.mimsave(output_gif, frames, fps=15, loop=0)
         return {
             "frames": len(frames),
             "battery_final": battery,
@@ -305,18 +450,27 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Run the PyBullet GUI while also saving the GIF.",
     )
+    parser.add_argument(
+        "--no-gif",
+        action="store_true",
+        help="Skip GIF rendering for smoother interactive GUI use.",
+    )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    output_gif = Path(args.gif).expanduser().resolve()
-    output_gif.parent.mkdir(parents=True, exist_ok=True)
+    output_gif = None if args.no_gif else Path(args.gif).expanduser().resolve()
+    if output_gif is not None:
+        output_gif.parent.mkdir(parents=True, exist_ok=True)
 
     result = simulate_demo(DemoConfig(), use_gui=args.gui, output_gif=output_gif)
 
     print("PyBullet delivery emergency landing demo completed.")
-    print(f"GIF saved to: {result['gif_path']}")
+    if result["gif_path"] is not None:
+        print(f"GIF saved to: {result['gif_path']}")
+    else:
+        print("GIF saving skipped for this run.")
     print(f"Frames rendered: {result['frames']}")
     print(f"Final battery: {result['battery_final']:.1f}%")
     print(f"Landing position: ({result['landing_xy'][0]:.2f}, {result['landing_xy'][1]:.2f})")

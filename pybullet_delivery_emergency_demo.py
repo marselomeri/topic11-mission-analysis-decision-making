@@ -128,197 +128,85 @@ def add_scene_labels(customer_xy: np.ndarray, pads: list[np.ndarray]) -> None:
         )
 
 
-def init_gui_hud() -> dict[str, object]:
-    board_origin = np.array((-2.3, 4.0, 3.4), dtype=float)
-    p.addUserDebugLine(board_origin + np.array((0.0, -0.55, -0.95)), board_origin + np.array((0.0, -0.55, 0.95)), [0.3, 0.3, 0.3], 3.0)
-    p.addUserDebugLine(board_origin + np.array((2.9, -0.55, -0.95)), board_origin + np.array((2.9, -0.55, 0.95)), [0.3, 0.3, 0.3], 3.0)
-    p.addUserDebugLine(board_origin + np.array((0.0, -0.55, 0.95)), board_origin + np.array((2.9, -0.55, 0.95)), [0.3, 0.3, 0.3], 3.0)
-    p.addUserDebugLine(board_origin + np.array((0.0, -0.55, -0.95)), board_origin + np.array((2.9, -0.55, -0.95)), [0.3, 0.3, 0.3], 3.0)
-
-    return {
-        "board_origin": board_origin,
-        "title": -1,
-        "state": -1,
-        "battery_text": -1,
-        "position": -1,
-        "message": -1,
-        "instructions": -1,
-        "battery_bg": -1,
-        "battery_fill": -1,
-        "battery_threshold": -1,
-        "drone_text": -1,
-    }
+def add_ned_frame(origin: np.ndarray) -> None:
+    north_end = origin + np.array((1.2, 0.0, 0.0))
+    east_end = origin + np.array((0.0, 1.2, 0.0))
+    down_end = origin + np.array((0.0, 0.0, -1.2))
+    p.addUserDebugLine(origin.tolist(), north_end.tolist(), [0.9, 0.2, 0.2], 4.0)
+    p.addUserDebugLine(origin.tolist(), east_end.tolist(), [0.2, 0.8, 0.2], 4.0)
+    p.addUserDebugLine(origin.tolist(), down_end.tolist(), [0.2, 0.4, 0.95], 4.0)
+    p.addUserDebugText("N", (north_end + np.array((0.06, 0.0, 0.0))).tolist(), [0.9, 0.2, 0.2], 1.15)
+    p.addUserDebugText("E", (east_end + np.array((0.0, 0.06, 0.0))).tolist(), [0.2, 0.8, 0.2], 1.15)
+    p.addUserDebugText("D", (down_end + np.array((0.0, 0.0, -0.06))).tolist(), [0.2, 0.4, 0.95], 1.15)
+    p.addUserDebugText("NED frame", (origin + np.array((-0.15, -0.25, 0.18))).tolist(), [0.1, 0.1, 0.1], 1.0)
 
 
-def init_camera_state() -> dict[str, object]:
-    return {
-        "mode": "overview",
-        "distance": 10.0,
-    }
+def create_battery_indicator(base_position: np.ndarray) -> dict[str, object]:
+    segments = []
+    for idx in range(10):
+        segment = create_box(
+            (0.1, 0.1, 0.08),
+            tuple(base_position + np.array((0.0, 0.0, 0.18 + idx * 0.18))),
+            (0.3, 0.3, 0.3, 1.0),
+        )
+        segments.append(segment)
+    p.addUserDebugText("Battery", (base_position + np.array((-0.16, -0.16, 2.1))).tolist(), [0.08, 0.08, 0.08], 1.1)
+    return {"segments": segments, "base_position": base_position}
 
 
-def update_camera_state(
-    camera_state: dict[str, object],
-    drone_position: np.ndarray,
-    customer_xy: np.ndarray,
-    pads: list[np.ndarray],
-    step: int,
-) -> None:
-    events = p.getKeyboardEvents()
-    triggered_mask = getattr(p, "KEY_WAS_TRIGGERED", 1)
-
-    key_map = {
-        ord("1"): "overview",
-        ord("2"): "top",
-        ord("3"): "follow",
-        ord("4"): "customer",
-        ord("5"): "pad1",
-        ord("6"): "pad2",
-        ord("7"): "pad3",
-        ord("0"): "orbit",
-    }
-    for key_code, mode in key_map.items():
-        if events.get(key_code, 0) & triggered_mask:
-            camera_state["mode"] = mode
-
-    if events.get(ord("="), 0) & triggered_mask or events.get(ord("+"), 0) & triggered_mask:
-        camera_state["distance"] = max(4.0, float(camera_state["distance"]) - 0.8)
-    if events.get(ord("-"), 0) & triggered_mask or events.get(ord("_"), 0) & triggered_mask:
-        camera_state["distance"] = min(18.0, float(camera_state["distance"]) + 0.8)
-
-    mode = str(camera_state["mode"])
-    distance = float(camera_state["distance"])
-
-    if mode == "overview":
-        target = np.array((4.0, 0.0, 1.2), dtype=float)
-        yaw = 36.0
-        pitch = -36.0
-    elif mode == "top":
-        target = np.array((4.0, 0.0, 0.8), dtype=float)
-        yaw = 0.0
-        pitch = -89.0
-    elif mode == "follow":
-        target = drone_position.copy()
-        target[2] = max(0.8, drone_position[2])
-        yaw = 30.0
-        pitch = -32.0
-    elif mode == "customer":
-        target = np.array((customer_xy[0], customer_xy[1], 0.8), dtype=float)
-        yaw = -145.0
-        pitch = -28.0
-    elif mode == "pad1":
-        target = np.array((pads[0][0], pads[0][1], 0.5), dtype=float)
-        yaw = 40.0
-        pitch = -35.0
-    elif mode == "pad2":
-        target = np.array((pads[1][0], pads[1][1], 0.5), dtype=float)
-        yaw = 40.0
-        pitch = -35.0
-    elif mode == "pad3":
-        target = np.array((pads[2][0], pads[2][1], 0.5), dtype=float)
-        yaw = 40.0
-        pitch = -35.0
-    else:
-        target = np.array((4.0, 0.0, 1.0), dtype=float)
-        yaw = (step * 0.45) % 360.0
-        pitch = -30.0
-
-    p.resetDebugVisualizerCamera(
-        cameraDistance=distance,
-        cameraYaw=yaw,
-        cameraPitch=pitch,
-        cameraTargetPosition=target.tolist(),
-    )
+def update_battery_indicator(indicator: dict[str, object], battery: float) -> None:
+    active_segments = int(math.ceil(max(0.0, min(100.0, battery)) / 10.0))
+    active_color = [0.2, 0.78, 0.3, 1.0] if battery > 45 else [0.95, 0.72, 0.18, 1.0] if battery > 30 else [0.9, 0.24, 0.24, 1.0]
+    for idx, segment in enumerate(indicator["segments"]):
+        color = active_color if idx < active_segments else [0.65, 0.65, 0.65, 1.0]
+        p.changeVisualShape(segment, -1, rgbaColor=color)
 
 
-def update_gui_hud(
-    hud: dict[str, object],
+def init_status_text() -> dict[str, int]:
+    return {"mission": -1, "battery": -1, "hint": -1, "drone": -1}
+
+
+def update_status_text(
+    status_ids: dict[str, int],
     state: MissionState,
     battery: float,
     emergency_pad: np.ndarray | None,
     current_position: np.ndarray,
-    step: int,
 ) -> None:
-    board_origin = np.array(hud["board_origin"], dtype=float)
-    battery_color = [0.21, 0.74, 0.42] if battery > 45 else [0.92, 0.72, 0.18] if battery > 30 else [0.86, 0.25, 0.25]
     message = "Nominal delivery route active."
+    color = (0.18, 0.18, 0.18)
     if emergency_pad is not None:
-        message = f"Low battery: divert to pad ({emergency_pad[0]:.1f}, {emergency_pad[1]:.1f})."
+        message = f"Emergency divert to ({emergency_pad[0]:.1f}, {emergency_pad[1]:.1f})"
+        color = (0.82, 0.25, 0.25)
 
-    hud["title"] = p.addUserDebugText(
-        "Delivery Mission Monitor",
-        textPosition=(board_origin + np.array((0.15, 0.0, 0.68))).tolist(),
-        textColorRGB=(0.95, 0.95, 0.95),
-        textSize=1.4,
-        replaceItemUniqueId=int(hud["title"]),
+    text_anchor = np.array((-1.9, 3.2, 0.2))
+    status_ids["mission"] = p.addUserDebugText(
+        f"Mission: {state_label(state)}",
+        textPosition=(text_anchor + np.array((0.0, 0.0, 0.65))).tolist(),
+        textColorRGB=[0.1, 0.1, 0.1],
+        textSize=1.15,
+        replaceItemUniqueId=int(status_ids["mission"]),
     )
-    hud["state"] = p.addUserDebugText(
-        f"State: {state_label(state)}",
-        textPosition=(board_origin + np.array((0.15, 0.0, 0.35))).tolist(),
-        textColorRGB=(0.88, 0.92, 0.96),
-        textSize=1.2,
-        replaceItemUniqueId=int(hud["state"]),
-    )
-    hud["battery_text"] = p.addUserDebugText(
-        f"Battery: {battery:5.1f}%",
-        textPosition=(board_origin + np.array((0.15, 0.0, 0.05))).tolist(),
-        textColorRGB=(0.88, 0.92, 0.96),
-        textSize=1.2,
-        replaceItemUniqueId=int(hud["battery_text"]),
-    )
-    hud["position"] = p.addUserDebugText(
-        f"Position: ({current_position[0]:.1f}, {current_position[1]:.1f}, {current_position[2]:.1f})",
-        textPosition=(board_origin + np.array((0.15, 0.0, -0.25))).tolist(),
-        textColorRGB=(0.88, 0.92, 0.96),
+    status_ids["battery"] = p.addUserDebugText(
+        f"Battery: {battery:4.1f}%",
+        textPosition=(text_anchor + np.array((0.0, 0.0, 0.35))).tolist(),
+        textColorRGB=[0.1, 0.1, 0.1],
         textSize=1.1,
-        replaceItemUniqueId=int(hud["position"]),
+        replaceItemUniqueId=int(status_ids["battery"]),
     )
-    hud["message"] = p.addUserDebugText(
+    status_ids["hint"] = p.addUserDebugText(
         message,
-        textPosition=(board_origin + np.array((0.15, 0.0, -0.58))).tolist(),
-        textColorRGB=(0.96, 0.84, 0.34) if emergency_pad is None else (0.92, 0.42, 0.34),
-        textSize=1.05,
-        replaceItemUniqueId=int(hud["message"]),
+        textPosition=(text_anchor + np.array((0.0, 0.0, 0.05))).tolist(),
+        textColorRGB=list(color),
+        textSize=1.0,
+        replaceItemUniqueId=int(status_ids["hint"]),
     )
-    hud["instructions"] = p.addUserDebugText(
-        f"Views: 1 overview 2 top 3 follow 4 customer 5/6/7 pads 0 orbit  +/- zoom   Step: {step}",
-        textPosition=(board_origin + np.array((0.15, 0.0, -0.84))).tolist(),
-        textColorRGB=(0.72, 0.78, 0.84),
-        textSize=0.95,
-        replaceItemUniqueId=int(hud["instructions"]),
-    )
-
-    bar_left = board_origin + np.array((1.38, 0.0, 0.02))
-    bar_right = board_origin + np.array((2.65, 0.0, 0.02))
-    fill_right = board_origin + np.array((1.38 + 1.27 * battery / 100.0, 0.0, 0.02))
-    threshold_x = 1.38 + 1.27 * 0.45
-    hud["battery_bg"] = p.addUserDebugLine(
-        bar_left.tolist(),
-        bar_right.tolist(),
-        [0.72, 0.72, 0.72],
-        8.0,
-        replaceItemUniqueId=int(hud["battery_bg"]),
-    )
-    hud["battery_fill"] = p.addUserDebugLine(
-        bar_left.tolist(),
-        fill_right.tolist(),
-        battery_color,
-        7.0,
-        replaceItemUniqueId=int(hud["battery_fill"]),
-    )
-    hud["battery_threshold"] = p.addUserDebugLine(
-        (board_origin + np.array((threshold_x, 0.0, -0.09))).tolist(),
-        (board_origin + np.array((threshold_x, 0.0, 0.13))).tolist(),
-        [0.92, 0.3, 0.3],
-        3.0,
-        replaceItemUniqueId=int(hud["battery_threshold"]),
-    )
-    hud["drone_text"] = p.addUserDebugText(
+    status_ids["drone"] = p.addUserDebugText(
         f"{state_label(state)} | {battery:4.1f}%",
         textPosition=(current_position + np.array((0.0, 0.0, 0.55))).tolist(),
-        textColorRGB=(0.12, 0.12, 0.12),
-        textSize=1.1,
-        replaceItemUniqueId=int(hud["drone_text"]),
+        textColorRGB=[0.12, 0.12, 0.12],
+        textSize=1.0,
+        replaceItemUniqueId=int(status_ids["drone"]),
     )
 
 
@@ -401,8 +289,9 @@ def simulate_demo(config: DemoConfig, use_gui: bool, output_gif: Path | None) ->
         customer_xy = np.array(scene["customer_xy"], dtype=float)
         pads = [np.array(pad, dtype=float) for pad in scene["pads"]]
         add_scene_labels(customer_xy, pads)
-        hud = init_gui_hud() if use_gui else None
-        camera_state = init_camera_state() if use_gui else None
+        add_ned_frame(np.array((-1.4, -1.4, 1.4)))
+        battery_indicator = create_battery_indicator(np.array((-1.55, 2.4, 0.0))) if use_gui else None
+        status_text = init_status_text() if use_gui else None
 
         state = MissionState.TAKEOFF
         battery = 100.0
@@ -467,10 +356,10 @@ def simulate_demo(config: DemoConfig, use_gui: bool, output_gif: Path | None) ->
             orientation = p.getQuaternionFromEuler((0.0, 0.0, yaw))
             p.resetBasePositionAndOrientation(drone, position.tolist(), orientation)
             p.resetBasePositionAndOrientation(package, (position + np.array((0.0, 0.0, -0.15))).tolist(), orientation)
-            if use_gui and hud is not None:
-                update_gui_hud(hud, state, battery, emergency_pad, position, step)
-            if use_gui and camera_state is not None:
-                update_camera_state(camera_state, position, customer_xy, pads, step)
+            if use_gui and battery_indicator is not None and step % 6 == 0:
+                update_battery_indicator(battery_indicator, battery)
+            if use_gui and status_text is not None and step % 6 == 0:
+                update_status_text(status_text, state, battery, emergency_pad, position)
             p.stepSimulation()
 
             if use_gui:

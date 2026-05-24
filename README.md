@@ -80,12 +80,11 @@ Recommended live-teaching mode:
 
 In GUI mode, the demo now includes:
 
-- a 3D mission-status board inside the world
-- a live battery bar that discharges during flight
+- a native PyBullet 3D world view with standard mouse rotate/pan/zoom
+- a visible `NED` reference frame in the scene
+- a physical battery indicator stack that discharges during flight
 - labels for the warehouse, customer, and emergency pads
-- explicit keyboard camera presets:
-  `1` overview, `2` top view, `3` follow drone, `4` customer view,
-  `5/6/7` emergency pad views, `0` orbit view, `+/-` zoom
+- lightweight mission and battery status text near the scene
 
 ## Suggested Student Deliverables
 

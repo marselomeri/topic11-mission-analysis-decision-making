@@ -150,32 +150,78 @@ def init_gui_hud() -> dict[str, object]:
     }
 
 
-def init_camera_controls() -> dict[str, int]:
+def init_camera_state() -> dict[str, object]:
     return {
-        "yaw": p.addUserDebugParameter("cam_yaw", -180.0, 180.0, 36.0),
-        "pitch": p.addUserDebugParameter("cam_pitch", -89.0, -5.0, -36.0),
-        "distance": p.addUserDebugParameter("cam_distance", 4.0, 18.0, 10.0),
-        "target_x": p.addUserDebugParameter("cam_target_x", -4.0, 12.0, 4.0),
-        "target_y": p.addUserDebugParameter("cam_target_y", -6.0, 6.0, 0.0),
-        "target_z": p.addUserDebugParameter("cam_target_z", 0.0, 6.0, 1.2),
-        "follow_drone": p.addUserDebugParameter("follow_drone", 0.0, 1.0, 0.0),
+        "mode": "overview",
+        "distance": 10.0,
     }
 
 
-def update_camera_controls(camera_controls: dict[str, int], drone_position: np.ndarray) -> None:
-    yaw = p.readUserDebugParameter(camera_controls["yaw"])
-    pitch = p.readUserDebugParameter(camera_controls["pitch"])
-    distance = p.readUserDebugParameter(camera_controls["distance"])
-    target_x = p.readUserDebugParameter(camera_controls["target_x"])
-    target_y = p.readUserDebugParameter(camera_controls["target_y"])
-    target_z = p.readUserDebugParameter(camera_controls["target_z"])
-    follow_drone = p.readUserDebugParameter(camera_controls["follow_drone"]) > 0.5
+def update_camera_state(
+    camera_state: dict[str, object],
+    drone_position: np.ndarray,
+    customer_xy: np.ndarray,
+    pads: list[np.ndarray],
+    step: int,
+) -> None:
+    events = p.getKeyboardEvents()
+    triggered_mask = getattr(p, "KEY_WAS_TRIGGERED", 1)
 
-    if follow_drone:
+    key_map = {
+        ord("1"): "overview",
+        ord("2"): "top",
+        ord("3"): "follow",
+        ord("4"): "customer",
+        ord("5"): "pad1",
+        ord("6"): "pad2",
+        ord("7"): "pad3",
+        ord("0"): "orbit",
+    }
+    for key_code, mode in key_map.items():
+        if events.get(key_code, 0) & triggered_mask:
+            camera_state["mode"] = mode
+
+    if events.get(ord("="), 0) & triggered_mask or events.get(ord("+"), 0) & triggered_mask:
+        camera_state["distance"] = max(4.0, float(camera_state["distance"]) - 0.8)
+    if events.get(ord("-"), 0) & triggered_mask or events.get(ord("_"), 0) & triggered_mask:
+        camera_state["distance"] = min(18.0, float(camera_state["distance"]) + 0.8)
+
+    mode = str(camera_state["mode"])
+    distance = float(camera_state["distance"])
+
+    if mode == "overview":
+        target = np.array((4.0, 0.0, 1.2), dtype=float)
+        yaw = 36.0
+        pitch = -36.0
+    elif mode == "top":
+        target = np.array((4.0, 0.0, 0.8), dtype=float)
+        yaw = 0.0
+        pitch = -89.0
+    elif mode == "follow":
         target = drone_position.copy()
-        target[2] = max(0.7, drone_position[2])
+        target[2] = max(0.8, drone_position[2])
+        yaw = 30.0
+        pitch = -32.0
+    elif mode == "customer":
+        target = np.array((customer_xy[0], customer_xy[1], 0.8), dtype=float)
+        yaw = -145.0
+        pitch = -28.0
+    elif mode == "pad1":
+        target = np.array((pads[0][0], pads[0][1], 0.5), dtype=float)
+        yaw = 40.0
+        pitch = -35.0
+    elif mode == "pad2":
+        target = np.array((pads[1][0], pads[1][1], 0.5), dtype=float)
+        yaw = 40.0
+        pitch = -35.0
+    elif mode == "pad3":
+        target = np.array((pads[2][0], pads[2][1], 0.5), dtype=float)
+        yaw = 40.0
+        pitch = -35.0
     else:
-        target = np.array((target_x, target_y, target_z), dtype=float)
+        target = np.array((4.0, 0.0, 1.0), dtype=float)
+        yaw = (step * 0.45) % 360.0
+        pitch = -30.0
 
     p.resetDebugVisualizerCamera(
         cameraDistance=distance,
@@ -235,7 +281,7 @@ def update_gui_hud(
         replaceItemUniqueId=int(hud["message"]),
     )
     hud["instructions"] = p.addUserDebugText(
-        f"Use GUI camera sliders on the right. Step: {step}",
+        f"Views: 1 overview 2 top 3 follow 4 customer 5/6/7 pads 0 orbit  +/- zoom   Step: {step}",
         textPosition=(board_origin + np.array((0.15, 0.0, -0.84))).tolist(),
         textColorRGB=(0.72, 0.78, 0.84),
         textSize=0.95,
@@ -356,7 +402,7 @@ def simulate_demo(config: DemoConfig, use_gui: bool, output_gif: Path | None) ->
         pads = [np.array(pad, dtype=float) for pad in scene["pads"]]
         add_scene_labels(customer_xy, pads)
         hud = init_gui_hud() if use_gui else None
-        camera_controls = init_camera_controls() if use_gui else None
+        camera_state = init_camera_state() if use_gui else None
 
         state = MissionState.TAKEOFF
         battery = 100.0
@@ -423,8 +469,8 @@ def simulate_demo(config: DemoConfig, use_gui: bool, output_gif: Path | None) ->
             p.resetBasePositionAndOrientation(package, (position + np.array((0.0, 0.0, -0.15))).tolist(), orientation)
             if use_gui and hud is not None:
                 update_gui_hud(hud, state, battery, emergency_pad, position, step)
-            if use_gui and camera_controls is not None:
-                update_camera_controls(camera_controls, position)
+            if use_gui and camera_state is not None:
+                update_camera_state(camera_state, position, customer_xy, pads, step)
             p.stepSimulation()
 
             if use_gui:

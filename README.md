@@ -83,7 +83,8 @@ In GUI mode, the demo now includes:
 - a 3D mission-status board inside the world
 - a live battery bar that discharges during flight
 - labels for the warehouse, customer, and emergency pads
-- free mouse camera control so you can rotate, pan, and zoom while the mission runs
+- explicit camera controls in the PyBullet debug panel:
+  `yaw`, `pitch`, `distance`, target coordinates, and an optional `follow_drone` mode
 
 ## Suggested Student Deliverables
 

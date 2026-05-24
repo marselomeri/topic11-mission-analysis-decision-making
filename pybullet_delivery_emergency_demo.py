@@ -150,6 +150,41 @@ def init_gui_hud() -> dict[str, object]:
     }
 
 
+def init_camera_controls() -> dict[str, int]:
+    return {
+        "yaw": p.addUserDebugParameter("cam_yaw", -180.0, 180.0, 36.0),
+        "pitch": p.addUserDebugParameter("cam_pitch", -89.0, -5.0, -36.0),
+        "distance": p.addUserDebugParameter("cam_distance", 4.0, 18.0, 10.0),
+        "target_x": p.addUserDebugParameter("cam_target_x", -4.0, 12.0, 4.0),
+        "target_y": p.addUserDebugParameter("cam_target_y", -6.0, 6.0, 0.0),
+        "target_z": p.addUserDebugParameter("cam_target_z", 0.0, 6.0, 1.2),
+        "follow_drone": p.addUserDebugParameter("follow_drone", 0.0, 1.0, 0.0),
+    }
+
+
+def update_camera_controls(camera_controls: dict[str, int], drone_position: np.ndarray) -> None:
+    yaw = p.readUserDebugParameter(camera_controls["yaw"])
+    pitch = p.readUserDebugParameter(camera_controls["pitch"])
+    distance = p.readUserDebugParameter(camera_controls["distance"])
+    target_x = p.readUserDebugParameter(camera_controls["target_x"])
+    target_y = p.readUserDebugParameter(camera_controls["target_y"])
+    target_z = p.readUserDebugParameter(camera_controls["target_z"])
+    follow_drone = p.readUserDebugParameter(camera_controls["follow_drone"]) > 0.5
+
+    if follow_drone:
+        target = drone_position.copy()
+        target[2] = max(0.7, drone_position[2])
+    else:
+        target = np.array((target_x, target_y, target_z), dtype=float)
+
+    p.resetDebugVisualizerCamera(
+        cameraDistance=distance,
+        cameraYaw=yaw,
+        cameraPitch=pitch,
+        cameraTargetPosition=target.tolist(),
+    )
+
+
 def update_gui_hud(
     hud: dict[str, object],
     state: MissionState,
@@ -200,7 +235,7 @@ def update_gui_hud(
         replaceItemUniqueId=int(hud["message"]),
     )
     hud["instructions"] = p.addUserDebugText(
-        f"Mouse: rotate / pan / zoom   Step: {step}",
+        f"Use GUI camera sliders on the right. Step: {step}",
         textPosition=(board_origin + np.array((0.15, 0.0, -0.84))).tolist(),
         textColorRGB=(0.72, 0.78, 0.84),
         textSize=0.95,
@@ -321,6 +356,7 @@ def simulate_demo(config: DemoConfig, use_gui: bool, output_gif: Path | None) ->
         pads = [np.array(pad, dtype=float) for pad in scene["pads"]]
         add_scene_labels(customer_xy, pads)
         hud = init_gui_hud() if use_gui else None
+        camera_controls = init_camera_controls() if use_gui else None
 
         state = MissionState.TAKEOFF
         battery = 100.0
@@ -387,6 +423,8 @@ def simulate_demo(config: DemoConfig, use_gui: bool, output_gif: Path | None) ->
             p.resetBasePositionAndOrientation(package, (position + np.array((0.0, 0.0, -0.15))).tolist(), orientation)
             if use_gui and hud is not None:
                 update_gui_hud(hud, state, battery, emergency_pad, position, step)
+            if use_gui and camera_controls is not None:
+                update_camera_controls(camera_controls, position)
             p.stepSimulation()
 
             if use_gui:
